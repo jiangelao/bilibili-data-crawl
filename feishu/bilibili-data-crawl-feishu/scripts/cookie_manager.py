@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """B站Cookie持久化管理模块
 
 负责Cookie的本地存储、读取、验证和更新。
-Cookie以JSON格式存储在用户本地，避免每次手动输入。
+Cookie以JSON格式存储在skill目录内部，避免每次手动输入。
 
-存储路径: ~/.bilibili_cookie.json
+存储路径: <skill-dir>/scripts/.bilibili_cookie.json
 """
 
 import json
@@ -13,8 +13,20 @@ import sys
 from pathlib import Path
 
 
-# 默认Cookie存储路径（用户主目录）
-DEFAULT_COOKIE_PATH = Path.home() / ".bilibili_cookie.json"
+# 默认Cookie存储路径（skill脚本所在目录，兼容云端Agent部署）
+_DEFAULT_COOKIE_PATH = None
+
+
+def _get_default_cookie_path() -> Path:
+    """获取默认Cookie文件存储路径（动态解析，延迟到首次调用）
+
+    Returns:
+        Path: Cookie文件的完整路径，位于skill的scripts/目录下
+    """
+    global _DEFAULT_COOKIE_PATH
+    if _DEFAULT_COOKIE_PATH is None:
+        _DEFAULT_COOKIE_PATH = Path(__file__).resolve().parent / ".bilibili_cookie.json"
+    return _DEFAULT_COOKIE_PATH
 
 
 def get_cookie_path() -> Path:
@@ -23,7 +35,7 @@ def get_cookie_path() -> Path:
     Returns:
         Path: Cookie文件的完整路径
     """
-    return DEFAULT_COOKIE_PATH
+    return _get_default_cookie_path()
 
 
 def save_cookie(sessdata: str, dedeuserid_ckmd5: str, cookie_path: str = None) -> dict:
@@ -37,7 +49,7 @@ def save_cookie(sessdata: str, dedeuserid_ckmd5: str, cookie_path: str = None) -
     Returns:
         dict: 操作结果 {success, message, path}
     """
-    path = Path(cookie_path) if cookie_path else DEFAULT_COOKIE_PATH
+    path = Path(cookie_path) if cookie_path else _get_default_cookie_path()
 
     try:
         cookie_data = {
@@ -75,7 +87,7 @@ def load_cookie(cookie_path: str = None) -> dict:
         dict: {success, sessdata, dedeuserid_ckmd5, message}
               如果文件不存在或格式错误，success为False
     """
-    path = Path(cookie_path) if cookie_path else DEFAULT_COOKIE_PATH
+    path = Path(cookie_path) if cookie_path else _get_default_cookie_path()
 
     if not path.exists():
         return {
@@ -132,7 +144,7 @@ def delete_cookie(cookie_path: str = None) -> dict:
     Returns:
         dict: 操作结果
     """
-    path = Path(cookie_path) if cookie_path else DEFAULT_COOKIE_PATH
+    path = Path(cookie_path) if cookie_path else _get_default_cookie_path()
 
     if not path.exists():
         return {
@@ -162,7 +174,7 @@ def cookie_exists(cookie_path: str = None) -> bool:
     Returns:
         bool: Cookie文件是否存在
     """
-    path = Path(cookie_path) if cookie_path else DEFAULT_COOKIE_PATH
+    path = Path(cookie_path) if cookie_path else _get_default_cookie_path()
     return path.exists()
 
 

@@ -31,11 +31,13 @@ description: 爬取B站创作中心视频数据，包括播放量、点赞量、
 
 执行前确认以下信息：
 1. 目标视频的BV号（如 BV1cNRWBzEkj）
-2. 云环境已安装 `mcporter` 并完成腾讯文档认证（数据将输出到腾讯文档在线表格）
+2. 腾讯文档已正确配置并连接（数据将输出到腾讯文档在线表格）
 
 Cookie信息（SESSDATA 和 DedeUserID__ckMd5）优先从本地文件加载，仅在本地无Cookie或Cookie失效时才要求用户提供。
 
 ## Execution
+
+> **Python 环境说明**：以下命令使用 `python3`（Linux/macOS 云端）或 `python`（Windows）。系统会通过 PATH 自动找到 Python，无需指定完整路径。如果遇到 "python not found"，请尝试切换命令。
 
 ### Step 1: 加载Cookie
 
@@ -43,22 +45,20 @@ Cookie信息（SESSDATA 和 DedeUserID__ckMd5）优先从本地文件加载，�
 
 运行Cookie加载脚本：
 ```
-"正确的Python路径" scripts/cookie_manager.py load
+python3 scripts/cookie_manager.py load
 ```
-
-> ⚠️ **Windows 注意事项**：Windows 系统自带的 `python3` 命令可能指向 Windows Apps Store 占位程序，导致异常退出（exit code 49）。**必须使用完整 Python 路径**（如 `D:/Dev_env/Python/Python3/python.exe`），或确认 `python` 命令可用。
 
 判断返回结果：
 
 - 如果 `success` 为 `true`：使用加载到的Cookie，跳到 Step 2。
 - 如果 `success` 为 `false` 且 `message` 包含"不存在"：提示用户提供Cookie，然后执行保存操作：
   ```
-  "Python路径" scripts/cookie_manager.py save --sessdata "SESSDATA值" --dedeuserid_ckmd5 "DedeUserID__ckMd5值"
+  python3 scripts/cookie_manager.py save --sessdata "SESSDATA值" --dedeuserid_ckmd5 "DedeUserID__ckMd5值"
   ```
   保存成功后继续 Step 2。
 - 如果 `success` 为 `false` 且 `message` 包含"格式错误"或"不完整"：提示用户Cookie文件已损坏，需要删除后重新提供。先执行删除：
   ```
-  "Python路径" scripts/cookie_manager.py delete
+  python3 scripts/cookie_manager.py delete
   ```
   然后提示用户提供新的Cookie并保存。
 
@@ -67,24 +67,26 @@ Cookie信息（SESSDATA 和 DedeUserID__ckMd5）优先从本地文件加载，�
 使用已加载的Cookie验证登录状态。
 
 ```
-"Python路径" scripts/verify_cookie.py "SESSDATA" "DedeUserID__ckMd5"
+python3 scripts/verify_cookie.py "SESSDATA" "DedeUserID__ckMd5"
 ```
 
 判断返回结果：
 
 - 如果 `is_login` 为 `true`：记录用户名，继续 Step 3。
 - 如果 `is_login` 为 `false`（Cookie失效）：
-  1. 删除本地失效的Cookie文件：`"Python路径" scripts/cookie_manager.py delete`
-  2. 提示用户："Cookie已失效，请重新登录B站并更新Cookie数据，需要提供 SESSDATA 和 DedeUserID__ckMd5"
-  3. 等待用户提供新Cookie后，执行保存：`"Python路径" scripts/cookie_manager.py save --sessdata "新值" --dedeuserid_ckmd5 "新值"`
-  4. 保存成功后重新验证，验证通过则继续 Step 3；仍然失败则停止执行。
+  1. 删除本地失效的Cookie文件：`python3 scripts/cookie_manager.py delete`
+  2. **输出**：提示用户"Cookie已失效，请重新登录B站并更新Cookie数据，需要提供 SESSDATA 和 DedeUserID__ckMd5"
+  3. **停止**：等待用户提供新Cookie
+  4. 收到新Cookie后，执行保存：`python3 scripts/cookie_manager.py save --sessdata "新值" --dedeuserid_ckmd5 "新值"`
+  5. 保存成功后重新执行 Step 2 验证
+  6. **停止**：如果重新验证仍失败，停止执行整个流程
 
 ### Step 3: 获取视频数据
 
 使用Cookie爬取指定视频的数据。
 
 ```
-"Python路径" scripts/fetch_video_data.py "SESSDATA" "DedeUserID__ckMd5" "BV号"
+python3 scripts/fetch_video_data.py "SESSDATA" "DedeUserID__ckMd5" "BV号"
 ```
 
 脚本会返回JSON格式的视频数据，包含以下字段（**所有比率字段均为数值类型**）：
@@ -116,34 +118,20 @@ Cookie信息（SESSDATA 和 DedeUserID__ckMd5）优先从本地文件加载，�
 
 **重要**：数据将输出到腾讯文档，存放在名为"几何节点视频数据"的文件夹中。每个视频标题对应一个独立的腾讯文档在线表格，多次爬取同一视频时自动追加新行。
 
-**推荐方式（云端 Agent 直接使用 MCP 工具）**：
+使用 Python 脚本更新腾讯文档：
+```
+python3 scripts/update_tencent_docs.py "视频标题" 'JSON数据'
+```
 
-1. 首先搜索"几何节点视频数据"文件夹是否存在：
-   - 使用 `mcporter call "tencent-docs" "manage.folder_list"` 查看根目录
-   - 如果文件夹不存在，使用 `mcporter call "tencent-docs" "manage.create_file" --args '{"file_type":"folder","title":"几何节点视频数据"}'` 创建
+脚本行为（按顺序执行）：
+1. 脚本检查腾讯文档中是否存在名为"几何节点视频数据"的文件夹。**如果不存在则自动创建**。
+2. 在该文件夹下搜索与视频标题同名的在线表格。
+3. **分支处理**：
+   - 表格不存在：**创建新表格**，写入表头和一条数据记录
+   - 表格已存在：**读取现有表格**，将新数据追加为新的行
+4. **输出**：脚本返回 {success, url, message}
 
-2. 在该文件夹下搜索与视频标题同名的表格：
-   - 使用 `mcporter call "tencent-docs" "manage.folder_list" --args '{"folder_id":"<文件夹ID>"}'`
-
-3. 如果表格不存在：创建新表格
-   - 使用 `mcporter call "tencent-docs" "manage.create_file" --args '{"file_type":"sheet","title":"<视频标题>","parent_id":"<文件夹ID>"}'`
-
-4. 如果表格已存在：读取现有表格，将新数据追加为新的行
-   - 使用 `mcporter call "tencent-docs" "sheet.get_sheet_info" --args '{"file_id":"<表格file_id>"}'` 获取 sheet_id
-   - 使用 `mcporter call "tencent-docs" "sheet.set_range_value"` 写入数据
-
-**备用方式（使用 Python 脚本）**：
-   ```
-   "Python路径" scripts/update_tencent_docs.py "视频标题" 'JSON数据'
-   ```
-
-脚本行为：
-1. 检查腾讯文档中是否存在名为"几何节点视频数据"的文件夹，不存在则自动创建
-2. 在该文件夹下搜索与视频标题同名的在线表格
-3. 如果表格不存在：创建新表格，写入表头和数据
-4. 如果表格已存在：读取现有表格，将新数据追加为新的行
-
-**严格按照以下腾讯文档表格列顺序：**
+**腾讯文档表格列顺序（严格遵守）：**
 
 | 列号 | 字段名 | 格式说明 |
 |------|--------|----------|
@@ -173,61 +161,33 @@ Cookie信息（SESSDATA 和 DedeUserID__ckMd5）优先从本地文件加载，�
 
 ## Error Handling
 
-Cookie文件不存在：
-- 自动提示用户提供Cookie并保存到本地
-- 保存后无需再次手动输入，后续执行自动加载
-
-Cookie失效：
-- 自动删除本地失效Cookie文件
-- 提示用户重新登录B站并更新Cookie数据
-- 用户更新后自动保存，后续执行自动加载
-
-Cookie文件损坏：
-- 提示用户文件格式错误
-- 自动删除损坏文件
-- 提示用户重新提供Cookie
-
-视频不存在：
-- 错误信息：视频不存在或无权访问，请检查BV号是否正确
-- 解决方式：确认BV号正确且视频在当前账号的创作中心中
-
-网络错误：
-- 重试3次后仍失败，提示用户检查网络连接
-
-腾讯文档API错误：
-- 错误信息：腾讯文档API调用失败，请检查tencent-docs connector连接状态
-- 解决方式：确认tencent-docs已正确配置并连接
-- 文件夹创建失败：检查腾讯文档权限
-- 表格写入失败：重试操作
+| 错误类型 | 表现 | 处理方式 |
+|----------|------|----------|
+| Cookie不存在 | load返回success=false，message含"不存在" | 提示用户提供并保存 |
+| Cookie失效 | verify返回is_login=false | 删除旧Cookie，提示用户重新提供 |
+| Cookie文件损坏 | load返回success=false，message含"格式错误" | 删除损坏文件，提示重新提供 |
+| 视频不存在 | fetch返回success=false | 检查BV号是否正确 |
+| 网络错误 | 请求超时或失败 | 重试3次后提示检查网络 |
+| 腾讯文档API错误 | 脚本返回success=false | 检查tencent-docs连接状态 |
 
 ## Resources
 
 ### scripts/
 
-cookie_manager.py - Cookie持久化管理
-- load: 从本地文件加载Cookie
-- save: 保存Cookie到本地文件（需要 --sessdata 和 --dedeuserid_ckmd5 参数）
-- delete: 删除本地Cookie文件
-- check: 检查Cookie文件是否存在
-- 存储路径: ~/.bilibili_cookie.json
+| 脚本 | 功能 | 输入 | 输出 |
+|------|------|------|------|
+| cookie_manager.py | Cookie持久化管理 | action(load/save/delete/check) + 参数 | JSON状态 |
+| verify_cookie.py | 验证Cookie有效性 | SESSDATA, DedeUserID__ckMd5 | {is_login, uname} |
+| fetch_video_data.py | 爬取视频数据 | SESSDATA, DedeUserID__ckMd5, BV号 | 视频数据JSON |
+| update_tencent_docs.py | 更新腾讯文档表格 | 视频标题, JSON数据 | {success, url} |
+| update_excel.py | 更新本地Excel表格（备份） | 视频标题, JSON数据, 保存目录 | {success, file_path} |
 
-verify_cookie.py - 验证Cookie有效性
-- 输入：SESSDATA, DedeUserID__ckMd5
-- 输出：登录状态（JSON格式）
-
-fetch_video_data.py - 爬取视频数据
-- 输入：SESSDATA, DedeUserID__ckMd5, BV号
-- 输出：视频数据（JSON格式，所有比率字段为数值）
-
-update_tencent_docs.py - 更新腾讯文档表格（已替代原 update_feishu.py）
-- 输入：视频标题, JSON数据
-- 输出：腾讯文档表格URL和状态
-- 自动管理"几何节点视频数据"文件夹，每个视频独立表格，自动追加数据
-- 使用腾讯文档 MCP 工具操作
+**Cookie存储路径**: `{skill目录}/data/cookie.json`
 
 ### references/
 
-api_reference.md - B站创作中心API文档
-- 接口地址和参数说明
-- 响应字段解释
-- 错误码对照表
+| 文件 | 内容 |
+|------|------|
+| api_reference.md | B站API端点、响应字段、错误码说明 |
+
+Read references/api_reference.md when need to understand B站API details or debug data fetching issues.

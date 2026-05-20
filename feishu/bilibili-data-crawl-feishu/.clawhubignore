@@ -10,3 +10,4 @@ coverage/
 .sessions/
 .profile/
 .daemon-ws-endpoint
+.bilibili_cookie.json

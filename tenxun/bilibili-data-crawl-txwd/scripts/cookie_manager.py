@@ -2,9 +2,9 @@
 """B站Cookie持久化管理模块
 
 负责Cookie的本地存储、读取、验证和更新。
-Cookie以JSON格式存储在用户本地，避免每次手动输入。
+Cookie以JSON格式存储在skill目录的data子目录中，避免每次手动输入。
 
-存储路径: ~/.bilibili_cookie.json
+存储路径: {skill_dir}/data/cookie.json
 """
 
 import json
@@ -13,8 +13,21 @@ import sys
 from pathlib import Path
 
 
-# 默认Cookie存储路径（用户主目录）
-DEFAULT_COOKIE_PATH = Path.home() / ".bilibili_cookie.json"
+def get_skill_dir() -> Path:
+    """获取skill根目录路径"""
+    # 当前文件路径: {skill_dir}/scripts/cookie_manager.py
+    return Path(__file__).resolve().parent.parent
+
+
+def get_data_dir() -> Path:
+    """获取data目录路径，不存在则自动创建"""
+    data_dir = get_skill_dir() / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
+# 默认Cookie存储路径（skill目录内的data子目录）
+DEFAULT_COOKIE_PATH = get_data_dir() / "cookie.json"
 
 
 def get_cookie_path() -> Path:
