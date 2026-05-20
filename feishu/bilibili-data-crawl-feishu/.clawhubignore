@@ -1,0 +1,12 @@
+.clawhub/
+__pycache__/
+.git/
+.env*
+*.skill
+temp/
+node_modules/
+coverage/
+.diagnostics/
+.sessions/
+.profile/
+.daemon-ws-endpoint
