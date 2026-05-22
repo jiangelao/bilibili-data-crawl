@@ -1,11 +1,41 @@
-#!/usr/bin/env python3
-"""爬取B站创作中心视频数据"""
+﻿#!/usr/bin/env python3
+"""爬取B站创作中心视频数据
+
+★ 关键改进（v0.4.0）：
+1. 启动时自动检测 requests 依赖，缺失时自动 pip install
+2. 返回结果中加入 bvid 字段，便于下游流程追踪
+"""
 
 import sys
 import json
-import requests
+import subprocess
+import importlib
 from datetime import datetime
 from typing import Any
+
+
+def ensure_requests():
+    """确保 requests 库可用，缺失时自动安装。"""
+    try:
+        import requests
+        return requests
+    except ImportError:
+        print("[依赖检查] requests 未安装，正在自动安装...", file=sys.stderr)
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', 'requests'],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode != 0:
+            print(json.dumps({
+                'success': False,
+                'message': f'自动安装 requests 失败：{result.stderr.strip()}',
+            }, ensure_ascii=False))
+            sys.exit(1)
+        import requests
+        return requests
+
+
+requests = ensure_requests()
 
 
 def fetch_video_data(
@@ -16,7 +46,7 @@ def fetch_video_data(
 ) -> dict[str, Any]:
     """爬取指定视频的数据。
 
-    先调用 B站公开 API 获取基础信息（标题、播放、点赞、收藏），
+    先调用 B站 公开 API 获取基础信息（标题、播放、点赞、收藏），
     再调用创作中心诊断API获取专业指标（跳出率、互动率等）。
 
     Args:
@@ -52,6 +82,7 @@ def fetch_video_data(
     # 初始化返回结果
     result: dict[str, Any] = {
         'success': False,
+        'bvid': bvid,
         'title': '',
         'views': 0,
         'likes': 0,

@@ -3,7 +3,7 @@ name: bilibili-creator-data
 description: 爬取B站创作中心视频数据，包括播放量、点赞量、收藏量、封标点击率、3秒跳出率、互动率等，并保存到飞书表格。支持Cookie持久化存储（存储于skill目录内部），仅在Cookie失效或不存在时才要求用户手动更新。触发方式：当用户需求涉及"爬取"、"抓取"、"b站"、"B站"、"哔哩哔哩"、"视频数据"、"创作中心"、"播放量"、"数据分析"等关键词或其近义词时，即可调用此skill。
 ---
 
-# Bilibili Creator Data
+# Bilibili Creator Data (v0.5.0)
 
 ## Overview
 
@@ -13,6 +13,12 @@ description: 爬取B站创作中心视频数据，包括播放量、点赞量、
 - Cookie持久化存储到skill目录内部（`scripts/.bilibili_cookie.json`），无需每次手动输入
 - Cookie文件不与用户主目录耦合，兼容云端Agent部署
 - 所有百分比字段存储为**数值类型**，可直接在飞书中用于计算
+- `fetch_video_data.py` 启动时自动检测并安装 `requests` 依赖，无需手动配置
+- `update_feishu.py` 改用 stdin（标准输入）传递 JSON 数据，彻底避免 shell 转义导致的 JSON 损坏
+- `update_feishu.py` v0.5.0 适配 Windows 平台（自动检测并使用 lark-cli.cmd）
+- `update_feishu.py` v0.5.0 修复 lark-cli 嵌套 JSON 返回结构解析（`data.results`、`data.spreadsheet.spreadsheet.token` 等）
+- `update_feishu.py` v0.5.0 适配 Windows 平台（自动检测并使用 lark-cli.cmd）
+- `update_feishu.py` v0.5.0 修复 lark-cli 嵌套 JSON 返回结构解析（`data.results`、`data.spreadsheet.spreadsheet.token` 等）
 
 ## Trigger Conditions
 
@@ -31,7 +37,9 @@ description: 爬取B站创作中心视频数据，包括播放量、点赞量、
 2. 云环境已安装 `lark-cli` 并完成飞书认证
 3. 数据将输出到飞书云表格，存放在"几何节点视频数据"文件夹中
 
-> ⚠️ **Windows Python 注意事项**：Windows 自带的 `python3` 命令可能指向 Windows Apps Store 占位程序（exit code 49）。必须使用完整 Python 路径（如 `D:/Dev_env/Python/Python3/python.exe`），或确认 `python` 命令可用。下文中的 `"Python路径"` 均指代此处的选择。
+> ⚠️ **Windows 注意事项**：
+> 1. **Python**: Windows 自带的 `python3` 命令可能指向 Windows Apps Store 占位程序（exit code 49）。遇到此问题时必须使用完整 Python 路径（如 `D:/Dev_env/Python/Python3/python.exe`），或确认 `python` 命令可用。下文的 `"Python路径"` 均指代此处选定的命令。
+> 2. **lark-cli**: Windows 上 lark-cli 安装为 `lark-cli.cmd`，`subprocess.run(["lark-cli"])` 无法直接调用。v0.5.0 已内置自动兼容处理（检测 `sys.platform` 自动切换）。如果手动测试命令，请使用 `lark-cli.cmd`。
 
 ## Execution
 
@@ -86,6 +94,8 @@ description: 爬取B站创作中心视频数据，包括播放量、点赞量、
 "Python路径" scripts/fetch_video_data.py "SESSDATA" "DedeUserID__ckMd5" "BV号"
 ```
 
+> 脚本启动时会自动检测 `requests` 库是否已安装，如缺失则自动执行 `pip install requests`。
+
 脚本返回JSON格式的视频数据，包含以下字段（所有比率字段均为数值类型）：
 
 | 字段 | 含义 | 示例 |
@@ -127,12 +137,19 @@ description: 爬取B站创作中心视频数据，包括播放量、点赞量、
 
 数据将输出到飞书云文档"几何节点视频数据"文件夹中。每个视频标题对应一个独立的飞书电子表格，多次爬取同一视频时自动追加新行。
 
+**注意：** JSON 数据通过**标准输入（stdin）管道**传递，避免 shell 转义导致 JSON 损坏。切勿使用命令行参数传递 JSON。
+
 运行飞书更新脚本：
 ```
-"Python路径" scripts/update_feishu.py "视频标题" 'JSON数据'
+echo 'JSON数据' | "Python路径" scripts/update_feishu.py "视频标题"
 ```
 
-其中 `'JSON数据'` 是 Step 3 返回的完整JSON字符串。
+等效的PowerShell写法：
+```
+'JSON数据' | "Python路径" scripts/update_feishu.py "视频标题"
+```
+
+其中 `'JSON数据'` 是 Step 3 返回的完整JSON字符串（不带额外转义）。
 
 **飞书表格列顺序（严格按照此顺序）：**
 
@@ -195,7 +212,9 @@ Read `references/error-reference.md` when any execution step returns an error. P
 | 视频数据 | BV号错误 / 无权访问 | 检查BV号 |
 | 网络 | 请求失败 / 超时 | 重试，检查网络 |
 | 飞书API | 认证失效 / 权限不足 | 检查 lark-cli 认证 |
-| lark-cli | 超时 | 稍后重试 |
+| lark-cli | 超时 / Windows 找不到命令 / 返回嵌套结构不匹配 | 重试 / 使用 lark-cli.cmd / 检查返回结构 |
+| JSON 传参 | 通过 argv 传递 JSON 导致 shell 转义损坏 | 改用 stdin 管道传递 |
+| 飞书搜索 | 搜索结果在 data.results 中导致永远找不到已有资源 | v0.5.0 已修复（_deep_get） |
 
 详细错误恢复步骤请见 `references/error-reference.md`。
 
@@ -209,8 +228,8 @@ Read `references/error-reference.md` when any execution step returns an error. P
 |------|------|----------|
 | `cookie_manager.py` | Cookie持久化管理（load/save/delete/check） | `--sessdata`, `--dedeuserid_ckmd5` |
 | `verify_cookie.py` | 验证Cookie是否有效 | SESSDATA, DedeUserID__ckMd5 |
-| `fetch_video_data.py` | 爬取视频数据 | SESSDATA, DedeUserID__ckMd5, BV号 |
-| `update_feishu.py` | 更新飞书表格 | 视频标题, JSON数据 |
+| `fetch_video_data.py` | 爬取视频数据，自动安装 requests | SESSDATA, DedeUserID__ckMd5, BV号 |
+| `update_feishu.py` | 更新飞书表格（JSON 数据通过 stdin 传递） | 视频标题（argv）, JSON数据（stdin） |
 
 ### references/
 

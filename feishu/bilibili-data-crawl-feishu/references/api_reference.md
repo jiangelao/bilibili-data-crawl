@@ -135,3 +135,136 @@
 
 ### 点赞率（计算值）
 点赞量 / 播放量 × 100%
+
+
+---
+
+## lark-cli 命令返回结构参考
+
+`update_feishu.py` 涉及的 lark-cli 命令及其返回结构如下：
+
+### drive +search
+
+搜索云空间资源。
+
+```
+lark-cli drive +search --query "名称" --doc-types "folder" --only-title --page-size 5
+```
+
+返回结构：
+```json
+{
+  "ok": true,
+  "identity": "user",
+  "data": {
+    "results": [
+      {"title": "几何节点视频数据", "url": "https://.../folder/xxx"}
+    ]
+  }
+}
+```
+
+**关键**: 结果在 `data.results` 中，非顶层 `results`。
+
+### drive +create-folder
+
+创建文件夹。
+
+```
+lark-cli drive +create-folder --name "几何节点视频数据"
+```
+
+返回结构：
+```json
+{
+  "data": {
+    "folder_token": "xxx"
+  }
+}
+```
+
+或：
+```json
+{
+  "folder_token": "xxx"
+}
+```
+
+### sheets +create
+
+创建电子表格。
+
+```
+lark-cli sheets +create --title "视频标题" --folder-token "xxx"
+```
+
+返回结构：
+```json
+{
+  "ok": true,
+  "identity": "user",
+  "data": {
+    "spreadsheet": {
+      "spreadsheet": {
+        "token": "xxx",
+        "url": "https://.../sheets/xxx",
+        "title": "视频标题"
+      }
+    }
+  }
+}
+```
+
+**关键**: spreadsheet_token 在 `data.spreadsheet.spreadsheet.token`（3 层嵌套），非顶层 `spreadsheet_token`。
+
+### sheets +info
+
+获取电子表格信息。
+
+```
+lark-cli sheets +info --spreadsheet-token "xxx"
+```
+
+返回结构：
+```json
+{
+  "ok": true,
+  "identity": "user",
+  "data": {
+    "sheets": {
+      "sheets": [
+        {"sheet_id": "xxx", "title": "Sheet1", "index": 0}
+      ]
+    },
+    "spreadsheet": {
+      "spreadsheet": {
+        "token": "xxx",
+        "title": "视频标题",
+        "url": "https://.../sheets/xxx"
+      }
+    }
+  }
+}
+```
+
+**关键**: sheet_id 在 `data.sheets.sheets[0].sheet_id`（2 层嵌套）。
+
+### sheets +write
+
+写入数据到表格。
+
+```
+lark-cli sheets +write --spreadsheet-token "xxx" --sheet-id "xxx" --range "A1" --values "[[...]]"
+```
+
+返回：成功时通常返回 `{"ok": true}` 或空对象。stdout 可能为空，仅 stderr 包含 JSON。
+
+### sheets +append
+
+追加数据到表格。
+
+```
+lark-cli sheets +append --spreadsheet-token "xxx" --sheet-id "xxx" --range "A1" --values "[[...]]"
+```
+
+返回：同 `sheets +write`。

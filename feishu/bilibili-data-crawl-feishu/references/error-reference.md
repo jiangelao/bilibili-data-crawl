@@ -1,4 +1,4 @@
-# 错误参考文档
+﻿# 错误参考文档
 
 当执行 `bilibili-creator-data` skill 的任何步骤返回错误时，查阅此文档确定根因并执行恢复操作。
 
@@ -62,6 +62,21 @@
   1. 确认登录账号与视频创作者账号一致
   2. 确认视频未设置为私密
 
+### 缺少 requests 依赖
+
+- **症状**: `fetch_video_data.py` 启动时报错 "No module named 'requests'"
+- **根因**: Python 环境中未安装 requests 库
+- **恢复**:
+  - 脚本已内置自动安装逻辑（`pip install requests`），通常无需手动处理
+  - 如果自动安装失败（如网络受限或无 pip 权限），手动执行：
+    ```
+    pip install requests
+    ```
+    或使用完整 Python 路径：
+    ```
+    "Python路径" -m pip install requests
+    ```
+
 ---
 
 ## 网络错误
@@ -82,6 +97,26 @@
 - **恢复**:
   1. 稍后重试
   2. 如持续超时，检查网络连接
+
+---
+
+## JSON 传参错误（v0.4.0 新增）
+
+### JSON 数据因 shell 转义损坏
+
+- **症状**: `update_feishu.py` 返回 JSON 解析错误，或在 Step 3 输出正常但 Step 5 报 JSON 格式错误
+- **根因**: 通过命令行参数（argv）传递 JSON 字符串时，shell 对引号、反斜杠等特殊字符进行了转义，导致 JSON 结构损坏
+- **恢复**:
+  1. 确保 Step 5 通过 **stdin（标准输入管道）** 传递 JSON 数据，而非命令行参数
+  2. 正确的调用方式：
+     ```
+     echo '{"title":"...","views":123}' | "Python路径" scripts/update_feishu.py "视频标题"
+     ```
+  3. 不要使用以下错误方式：
+     ```
+     "Python路径" scripts/update_feishu.py "视频标题" '{"title":"...","views":123}'  # 错误！
+     ```
+  4. 如果 JSON 中包含单引号，确保在传递前已完成正确转义
 
 ---
 
@@ -119,6 +154,58 @@
   1. 确认网络连接正常
   2. 稍后重试
   3. 如果持续超时，检查飞书服务状态或使用 `lark-cli` 直连测试
+
+### lark-cli 返回空输出或非 JSON 输出
+
+- **症状**: `update_feishu.py` 在解析 lark-cli 输出时报错
+- **根因**: lark-cli 部分命令（如 sheets +write）在成功时 stdout 可能为空，或 stderr 包含诊断信息
+- **恢复**:
+  - 脚本已内置 stderr 回退解析逻辑，通常无需手动处理
+  - 如果持续失败，尝试直接运行 lark-cli 命令查看原生输出：
+    ```
+    lark-cli sheets +info --spreadsheet-token "xxx"
+    ```
+
+### lark-cli 返回结构与预期不符
+
+- **症状**: 脚本报错如 "未找到 spreadsheet_token" 或 "工作表列表为空"
+- **根因**: lark-cli 某些命令的 JSON 返回结构有多种嵌套层级：
+  - 直接格式：`{"spreadsheet_token": "xxx"}`
+  - 单层包裹：`{"data": {"spreadsheet_token": "xxx"}}`
+  - 深层嵌套：`{"data": {"spreadsheet": {"spreadsheet": {"token": "xxx"}}}}`（`sheets +create`）
+  - 双层嵌套：`{"data": {"sheets": {"sheets": [{"sheet_id": "xxx"}]}}}`（`sheets +info`）
+- **恢复**:
+  - 脚本 v0.5.0 使用 `_deep_get()` 函数通过 key 路径（如 `"data.spreadsheet.spreadsheet.token"`）支持多层嵌套
+  - 如果仍失败，手动运行命令检查原生返回结构：
+    ```
+    lark-cli sheets +info --spreadsheet-token "xxx"
+    lark-cli sheets +create --title "测试" --folder-token "xxx"
+    lark-cli drive +search --query "xxx" --doc-types "folder" --only-title
+    ```
+
+### 重复创建文件夹/表格（v0.5.0 修复）
+
+- **症状**: 每次执行都新建一个"几何节点视频数据"文件夹，或在该文件夹下创建新的同名空表格，而非复用已有资源
+- **根因**: `drive +search` 的返回结果嵌套在 `data.results` 中（而非顶层 `results`），旧版 `_extract_field()` 无法到达该层级，导致搜索永远返回空，每次都创建新资源
+- **恢复**:
+  - v0.5.0 已使用 `_deep_get(result, 'data.results', [])` 正确解析
+  - 如果问题仍然出现，手动验证搜索：
+    ```
+    lark-cli drive +search --query "几何节点视频数据" --doc-types "folder" --only-title --page-size 5
+    ```
+  - 清理飞书云空间中重复的文件夹和空表格后，重新执行
+
+### lark-cli 在 Windows 上找不到命令
+
+- **症状**: `update_feishu.py` 报错 "找不到 lark-cli" 或 "[WinError 2] 系统找不到指定的文件"
+- **根因**: Windows 上 `lark-cli` 是 `.cmd` 文件，`subprocess.run(['lark-cli'])` 无法直接执行
+- **恢复**:
+  - v0.5.0 已自动检测 `sys.platform == 'win32'` 并使用 `lark-cli.cmd` + `shell=True`
+  - 如果持续失败，确认安装路径：
+    ```
+    where.exe lark-cli.cmd
+    ```
+  - 或者将 lark-cli.cmd 所在目录（通常为 `C:\Program Files\nodejs\node_global\`）添加到 PATH 环境变量
 
 ---
 
